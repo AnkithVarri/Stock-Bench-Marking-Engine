@@ -25,13 +25,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	estimate := 4 * float64(hits) / float64(*samples)
-	fmt.Printf("Estimate:       %.10f\n", estimate)
-	fmt.Printf("Absolute error: %.10f\n", math.Abs(math.Pi-estimate))
-	fmt.Printf("Samples:        %d\n", *samples)
-	fmt.Printf("Workers:        %d\n", min(int64(*workers), *samples))
-	fmt.Printf("Elapsed:        %s\n", elapsed)
-	fmt.Printf("Throughput:     %.0f samples/s\n", float64(*samples)/elapsed.Seconds())
+	
 }
 
 func estimate(samples int64, workers int, seed int64) (int64, error) {
