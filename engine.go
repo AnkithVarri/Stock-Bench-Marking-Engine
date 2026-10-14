@@ -202,3 +202,11 @@ func runNaive(p Params, pr *prepared) Result {
 	}
 	return finish(p, merged, p.Paths, 0, elapsed, ModeNaive)
 }
+
+
+type shard struct {
+	mu sync.Mutex
+	a  acc
+	_  [64]byte // keep neighbouring shard locks off one cache line
+}
+
