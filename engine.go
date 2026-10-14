@@ -210,3 +210,111 @@ type shard struct {
 	_  [64]byte // keep neighbouring shard locks off one cache line
 }
 
+func runPool(p Params, pr *prepared) Result {
+	workers := workerCount(p)
+	batch := p.Batch
+	if batch < 1 {
+		batch = 8192
+	}
+	jobs := make(chan int, workers) // batch 1 means one send per path
+	parts := make([]acc, workers)
+	var wg sync.WaitGroup
+	start := time.Now()
+	for w := 0; w < workers; w++ {
+		parts[w] = newAcc(pr)
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			rng := newRNG(p.Seed, w)
+			dst := &parts[w]
+			for n := range jobs {
+				consume(pr, rng, n, dst)
+			}
+		}(w)
+	}
+	left := p.Paths
+	for left > 0 {
+		n := batch
+		if n > left {
+			n = left
+		}
+		jobs <- n
+		left -= n
+	}
+	close(jobs)
+	wg.Wait()
+	elapsed := time.Since(start)
+	merged := newAcc(pr)
+	for i := range parts {
+		merged.merge(parts[i])
+	}
+	return finish(p, merged, workers, batch, elapsed, ModePool)
+}
+
+type partKind int
+
+const (
+	partLocal partKind = iota
+	partShared
+	partLocked
+)
+
+func runPartition(p Params, pr *prepared, kind partKind) Result {
+	workers := workerCount(p)
+	counts := splitPaths(p.Paths, workers)
+	parts := make([]acc, workers)
+	for i := range parts {
+		parts[i] = newAcc(pr)
+	}
+	mode := ModePartition
+	var shared *lockedRNG
+	var lock sync.Mutex
+	sharedAcc := newAcc(pr)
+	if kind == partShared {
+		mode = ModeSharedRNG
+		shared = &lockedRNG{r: newRNG(p.Seed, 0)}
+	}
+	if kind == partLocked {
+		mode = ModeLockedAgg
+	}
+
+	var wg sync.WaitGroup
+	start := time.Now()
+	for w := 0; w < workers; w++ {
+		if counts[w] == 0 {
+			continue
+		}
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			switch kind {
+			case partShared:
+				consume(pr, shared, counts[w], &parts[w])
+			case partLocked:
+				rng := newRNG(p.Seed, w)
+				for i := 0; i < counts[w]; i++ {
+					x := onePayoff(pr, rng)
+					lock.Lock()
+					sharedAcc.observe(x)
+					lock.Unlock()
+				}
+			default:
+				rng := newRNG(p.Seed, w)
+				consume(pr, rng, counts[w], &parts[w])
+			}
+		}(w)
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+
+	if kind == partLocked {
+		return finish(p, sharedAcc, workers, 0, elapsed, mode)
+	}
+	merged := newAcc(pr)
+	for i := range parts {
+		merged.merge(parts[i])
+	}
+	return finish(p, merged, workers, 0, elapsed, mode)
+}
+
+
