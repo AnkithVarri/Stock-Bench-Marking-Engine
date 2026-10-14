@@ -367,3 +367,27 @@ func newRNG(seed int64, stream int) *rand.Rand {
 	return rand.New(rand.NewPCG(s1, s2))
 }
 
+
+func streamSeed(base int64, stream int) (uint64, uint64) {
+	x := uint64(base) ^ 0xA0761D6478BD642F
+	x += uint64(stream) * 0x9E3779B97F4A7C15
+	return splitmix64(&x), splitmix64(&x)
+}
+
+func splitmix64(x *uint64) uint64 {
+	*x += 0x9E3779B97F4A7C15
+	z := *x
+	z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+	z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+	return z ^ (z >> 31)
+}
+
+func cpuNow() time.Duration {
+	var r syscall.Rusage
+	if syscall.Getrusage(syscall.RUSAGE_SELF, &r) != nil {
+		return 0
+	}
+	return time.Duration(r.Utime.Nano()) + time.Duration(r.Stime.Nano())
+}
+
+
