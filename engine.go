@@ -317,4 +317,53 @@ func runPartition(p Params, pr *prepared, kind partKind) Result {
 	return finish(p, merged, workers, 0, elapsed, mode)
 }
 
+func onePayoff[R interface{ NormFloat64() float64 }](pr *prepared, rng R) float64 {
+	var sink acc
+	consume(pr, rng, 1, &sink)
+	if sink.m.n == 0 {
+		return 0
+	}
+	return sink.m.sum
+}
+
+func workerCount(p Params) int {
+	n := p.Workers
+	if n < 1 {
+		n = runtime.NumCPU()
+	}
+	if n > p.Paths {
+		n = p.Paths
+	}
+	return n
+}
+
+func splitPaths(paths, workers int) []int {
+	counts := make([]int, workers)
+	base := paths / workers
+	extra := paths % workers
+	for i := 0; i < workers; i++ {
+		counts[i] = base
+		if i < extra {
+			counts[i]++
+		}
+	}
+	return counts
+}
+
+type lockedRNG struct {
+	mu sync.Mutex
+	r  *rand.Rand
+}
+
+func (g *lockedRNG) NormFloat64() float64 {
+	g.mu.Lock()
+	z := g.r.NormFloat64()
+	g.mu.Unlock()
+	return z
+}
+
+func newRNG(seed int64, stream int) *rand.Rand {
+	s1, s2 := streamSeed(seed, stream)
+	return rand.New(rand.NewPCG(s1, s2))
+}
 
