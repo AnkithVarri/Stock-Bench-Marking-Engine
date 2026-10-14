@@ -142,3 +142,63 @@ func closedResult(p Params, v float64) Result {
 	}
 	return res
 }
+
+func finish(p Params, a acc, workers, batch int, elapsed time.Duration, mode Mode) Result {
+	mean, stderr := a.m.meanStd()
+	res := Result{
+		Mode: mode, Workers: workers, Batch: batch, Paths: p.Paths,
+		Elapsed: elapsed, Mean: mean, StdErr: stderr, Retained: a.retained(),
+	}
+	if a.h != nil {
+		res.VaR95 = a.h.quantile(0.95)
+		res.ES95 = a.h.es(0.95)
+		res.VaR99 = a.h.quantile(0.99)
+		res.ES99 = a.h.es(0.99)
+	}
+	return res
+}
+
+func newAcc(pr *prepared) acc {
+	a := acc{}
+	if pr.product.needsHist() {
+		a.h = makeHist(pr.histLo, pr.histHi, histBins)
+	}
+	return a
+}
+
+func runSequential(p Params, pr *prepared) Result {
+	rng := newRNG(p.Seed, 0)
+	a := newAcc(pr)
+	start := time.Now()
+	consume(pr, rng, p.Paths, &a)
+	return finish(p, a, 1, 0, time.Since(start), ModeSequential)
+}
+
+func runNaive(p Params, pr *prepared) Result {
+	const shards = 64
+	sh := make([]shard, shards)
+	for i := range sh {
+		sh[i].a = newAcc(pr)
+	}
+	var wg sync.WaitGroup
+	wg.Add(p.Paths)
+	start := time.Now()
+	for i := 0; i < p.Paths; i++ {
+		go func(i int) {
+			defer wg.Done()
+			rng := newRNG(p.Seed, i)
+			x := onePayoff(pr, rng)
+			s := &sh[i&(shards-1)]
+			s.mu.Lock()
+			s.a.observe(x)
+			s.mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	elapsed := time.Since(start)
+	merged := newAcc(pr)
+	for i := range sh {
+		merged.merge(sh[i].a)
+	}
+	return finish(p, merged, p.Paths, 0, elapsed, ModeNaive)
+}
