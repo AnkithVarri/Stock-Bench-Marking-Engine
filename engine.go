@@ -82,3 +82,63 @@ type Result struct {
 	Retained    int
 	Closed      bool
 }
+
+
+func Run(p Params) (Result, error) {
+	if err := p.validate(); err != nil {
+		return Result{}, err
+	}
+	pr, err := prepare(p)
+	if err != nil {
+		return Result{}, err
+	}
+	if pr.hasClosed {
+		return closedResult(p, pr.closed), nil
+	}
+
+	var mem0 runtime.MemStats
+	runtime.ReadMemStats(&mem0)
+	cpu0 := cpuNow()
+
+	var res Result
+	switch p.Mode {
+	case ModeSequential:
+		res = runSequential(p, &pr)
+	case ModeNaive:
+		res = runNaive(p, &pr)
+	case ModePool:
+		res = runPool(p, &pr)
+	case ModePartition:
+		res = runPartition(p, &pr, partLocal)
+	case ModeSharedRNG:
+		res = runPartition(p, &pr, partShared)
+	case ModeLockedAgg:
+		res = runPartition(p, &pr, partLocked)
+	default:
+		return Result{}, fmt.Errorf("unknown mode %s", p.Mode)
+	}
+
+	elapsed := res.Elapsed
+	if elapsed > 0 {
+		res.Cores = float64(cpuNow()-cpu0) / float64(elapsed)
+		res.PathsPerSec = float64(res.Paths) / elapsed.Seconds()
+	}
+	var mem1 runtime.MemStats
+	runtime.ReadMemStats(&mem1)
+	res.Mallocs = mem1.Mallocs - mem0.Mallocs
+	res.AllocBytes = mem1.TotalAlloc - mem0.TotalAlloc
+	res.Product = p.Product
+	return res, nil
+}
+
+func closedResult(p Params, v float64) Result {
+	res := Result{
+		Mode: p.Mode, Product: p.Product, Paths: p.Paths, Mean: v,
+		Workers: 1, Closed: true, Retained: 32,
+	}
+	if p.Product.needsHist() {
+		res.VaR95, res.VaR99 = v, v
+		res.ES95, res.ES99 = v, v
+	}
+	return res
+}
