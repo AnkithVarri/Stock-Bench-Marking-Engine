@@ -21,3 +21,35 @@ func TestBlackScholes(t *testing.T) {
 		t.Fatalf("bs = %.16f, want %.16f", got, want)
 	}
 }
+
+func TestEuropeanNearAnalytic(t *testing.T) {
+	p := euro()
+	p.Paths = 200_000
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := blackScholesCall(p.Spot, p.Strike, p.Rate, p.Vol, p.Years)
+	if res.StdErr <= 0 || math.Abs(res.Mean-ref) > 6*res.StdErr {
+		t.Fatalf("mean %.6f stderr %.6f analytic %.6f", res.Mean, res.StdErr, ref)
+	}
+}
+
+func TestSequentialMatchesOneWorker(t *testing.T) {
+	p := euro()
+	p.Paths = 20_000
+	p.Workers = 1
+	p.Mode = ModeSequential
+	a, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Mode = ModePartition
+	b, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Mean != b.Mean {
+		t.Fatalf("sequential %.16f partition %.16f", a.Mean, b.Mean)
+	}
+}
