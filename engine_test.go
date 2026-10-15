@@ -53,3 +53,39 @@ func TestSequentialMatchesOneWorker(t *testing.T) {
 		t.Fatalf("sequential %.16f partition %.16f", a.Mean, b.Mean)
 	}
 }
+
+func TestPartitionReproducible(t *testing.T) {
+	p := euro()
+	a, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Mean != b.Mean {
+		t.Fatalf("two runs %.16f and %.16f", a.Mean, b.Mean)
+	}
+}
+
+func TestAsianStepEqualsEuropean(t *testing.T) {
+	// One fixing over the whole year is the European payoff.
+	p := euro()
+	p.Paths = 10_000
+	p.Workers = 1
+	p.Mode = ModeSequential
+	p.Steps = 1
+	eu, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Product = ProductAsian
+	as, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(eu.Mean-as.Mean) > 1e-9 {
+		t.Fatalf("european %.16f asian %.16f", eu.Mean, as.Mean)
+	}
+}
