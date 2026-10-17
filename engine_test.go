@@ -89,3 +89,31 @@ func TestAsianStepEqualsEuropean(t *testing.T) {
 		t.Fatalf("european %.16f asian %.16f", eu.Mean, as.Mean)
 	}
 }
+
+func TestZeroVolClosed(t *testing.T) {
+	p := euro()
+	p.Vol = 0
+	p.Paths = 10
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := math.Exp(-p.Rate*p.Years) * math.Max(0, p.Spot*math.Exp(p.Rate*p.Years)-p.Strike)
+	if !res.Closed || math.Abs(res.Mean-want) > 1e-9 {
+		t.Fatalf("closed=%v mean %.16f want %.16f", res.Closed, res.Mean, want)
+	}
+}
+
+func TestBarrierAlreadyOut(t *testing.T) {
+	p := euro()
+	p.Product = ProductBarrier
+	p.Barrier = 120
+	p.Spot = 100
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Mean != 0 {
+		t.Fatalf("knocked at t0, mean = %v", res.Mean)
+	}
+}
