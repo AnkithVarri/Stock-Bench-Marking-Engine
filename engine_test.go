@@ -161,3 +161,62 @@ func TestVaRZeroVol(t *testing.T) {
 		t.Fatalf("mean %v var %v es %v", res.Mean, res.VaR95, res.ES95)
 	}
 }
+
+func TestPortfolioRuns(t *testing.T) {
+	p := euro()
+	p.Product = ProductPortfolio
+	p.Assets = defaultBook()
+	p.Paths = 80_000
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StdErr <= 0 || math.IsNaN(res.VaR95) || math.IsNaN(res.ES99) {
+		t.Fatalf("bad risk numbers %+v", res)
+	}
+	if res.ES99+1e-6 < res.VaR99 {
+		t.Fatalf("ES %.6f below VaR %.6f", res.ES99, res.VaR99)
+	}
+}
+
+func TestCholeskyRecoversCorrelation(t *testing.T) {
+	flat := []float64{
+		1, 0.8,
+		0.8, 1,
+	}
+	l, err := cholesky(corrMatrix(flat, 2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// L L^T ≈ corr
+	for i := 0; i < 2; i++ {
+		for j := 0; j < 2; j++ {
+			dot := 0.0
+			for k := 0; k < 2; k++ {
+				dot += l[i][k] * l[j][k]
+			}
+			if math.Abs(dot-flat[i*2+j]) > 1e-9 {
+				t.Fatalf("LLt[%d,%d]=%v", i, j, dot)
+			}
+		}
+	}
+}
+
+func TestHistogramQuantile(t *testing.T) {
+	h := makeHist(0, 20, 2)
+	for i := 0; i < 95; i++ {
+		h.add(1)
+	}
+	for i := 0; i < 5; i++ {
+		h.add(15)
+	}
+	if math.Abs(h.quantile(0.95)-10) > 1e-9 {
+		t.Fatalf("quantile = %v", h.quantile(0.95))
+	}
+	if math.Abs(h.es(0.95)-15) > 1e-6 {
+		t.Fatalf("es = %v", h.es(0.95))
+	}
+}
+
+
+
