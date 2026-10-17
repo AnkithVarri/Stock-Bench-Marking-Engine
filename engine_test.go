@@ -219,4 +219,52 @@ func TestHistogramQuantile(t *testing.T) {
 }
 
 
+func TestStreamingDoesNotGrowWithPaths(t *testing.T) {
+	small := euro()
+	small.Paths = 1_000
+	small.Workers = 4
+	a, err := Run(small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	big := small
+	big.Paths = 200_000
+	b, err := Run(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Retained != b.Retained {
+		t.Fatalf("retained grew from %d to %d", a.Retained, b.Retained)
+	}
+	if b.Mallocs > uint64(b.Paths)/100 {
+		t.Fatalf("mallocs %d for %d paths", b.Mallocs, b.Paths)
+	}
+}
 
+func TestNaiveRejectsHuge(t *testing.T) {
+	p := euro()
+	p.Mode = ModeNaive
+	p.Paths = naiveSoftCap + 1
+	if _, err := Run(p); err == nil {
+		t.Fatal("expected the naive cap to trip")
+	}
+}
+
+func TestModesNearAnalytic(t *testing.T) {
+	p := euro()
+	p.Paths = 60_000
+	for _, mode := range []Mode{ModeSequential, ModeNaive, ModePool, ModePartition, ModeSharedRNG, ModeLockedAgg} {
+		p.Mode = mode
+		p.Workers = 4
+		res, err := Run(p)
+		if err != nil {
+			t.Fatal(mode, err)
+		}
+		ref := blackScholesCall(100, 100, 0.05, 0.2, 1)
+		if math.Abs(res.Mean-ref) > 8*res.StdErr {
+			t.Fatalf("%s mean %.6f stderr %.6f analytic %.6f", mode, res.Mean, res.StdErr, ref)
+		}
+	}
+}
+
+var sink float64
