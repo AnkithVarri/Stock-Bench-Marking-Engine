@@ -268,3 +268,65 @@ func TestModesNearAnalytic(t *testing.T) {
 }
 
 var sink float64
+
+func BenchmarkPartition(b *testing.B) {
+	for _, w := range []int{1, 8, 32} {
+		b.Run(fmtWorkers(w), func(b *testing.B) {
+			bench(b, ModePartition, w, 8192, 50_000)
+		})
+	}
+}
+
+func BenchmarkPool(b *testing.B) {
+	for _, batch := range []int{1, 8192} {
+		b.Run(fmtBatch(batch), func(b *testing.B) {
+			bench(b, ModePool, 8, batch, 50_000)
+		})
+	}
+}
+
+func BenchmarkSharedRNG(b *testing.B)  { bench(b, ModeSharedRNG, 8, 0, 50_000) }
+func BenchmarkLockedAgg(b *testing.B)  { bench(b, ModeLockedAgg, 8, 0, 50_000) }
+func BenchmarkSequential(b *testing.B) { bench(b, ModeSequential, 1, 0, 50_000) }
+
+func BenchmarkNaive(b *testing.B) { bench(b, ModeNaive, 0, 0, 20_000) }
+
+func bench(b *testing.B, mode Mode, workers, batch, paths int) {
+	p := euro()
+	p.Mode = mode
+	p.Workers = workers
+	p.Batch = batch
+	p.Paths = paths
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, err := Run(p)
+		if err != nil {
+			b.Fatal(err)
+		}
+		sink = res.Mean
+	}
+	b.ReportMetric(float64(paths)*float64(b.N)/b.Elapsed().Seconds(), "paths/s")
+}
+
+func fmtWorkers(n int) string { return "workers=" + strconvI(n) }
+func fmtBatch(n int) string   { return "batch=" + strconvI(n) }
+
+func strconvI(n int) string {
+	return fmtInt(n)
+}
+
+func fmtInt(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [16]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
+}
+
