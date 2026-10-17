@@ -117,3 +117,47 @@ func TestBarrierAlreadyOut(t *testing.T) {
 		t.Fatalf("knocked at t0, mean = %v", res.Mean)
 	}
 }
+
+func TestBarrierZeroVolLives(t *testing.T) {
+	p := euro()
+	p.Product = ProductBarrier
+	p.Vol = 0
+	p.Rate = 0
+	p.Barrier = 50
+	p.Strike = 90
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(res.Mean-10) > 1e-9 {
+		t.Fatalf("mean %.16f, want 10", res.Mean)
+	}
+}
+
+func TestGBMMean(t *testing.T) {
+	p := euro()
+	p.Product = ProductGBM
+	p.Paths = 200_000
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := p.Spot * math.Exp(p.Rate*p.Years)
+	if math.Abs(res.Mean-want) > 6*res.StdErr {
+		t.Fatalf("mean %.6f want %.6f stderr %.6f", res.Mean, want, res.StdErr)
+	}
+}
+
+func TestVaRZeroVol(t *testing.T) {
+	p := euro()
+	p.Product = ProductVaR
+	p.Vol = 0
+	p.Rate = 0
+	res, err := Run(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Mean != 0 || res.VaR95 != 0 || res.ES95 != 0 {
+		t.Fatalf("mean %v var %v es %v", res.Mean, res.VaR95, res.ES95)
+	}
+}
