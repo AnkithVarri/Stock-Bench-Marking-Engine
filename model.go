@@ -97,3 +97,52 @@ func (p Params) mu() float64 {
 	}
 	return p.Rate
 }
+
+
+func (p Params) validate() error {
+	if p.Paths < 1 {
+		return fmt.Errorf("paths must be >= 1")
+	}
+	if p.Workers < 0 {
+		return fmt.Errorf("workers must be >= 0")
+	}
+	if p.Years < 0 || p.Vol < 0 || p.Spot <= 0 || p.Strike <= 0 {
+		return fmt.Errorf("spot and strike must be > 0; vol and years must be >= 0")
+	}
+	if math.IsNaN(p.Rate) || math.IsInf(p.Rate, 0) {
+		return fmt.Errorf("rate must be finite")
+	}
+	if p.Product == ProductBarrier && p.Barrier <= 0 {
+		return fmt.Errorf("barrier must be > 0")
+	}
+	if p.Product == ProductAsian || p.Product == ProductBarrier {
+		if p.Steps < 1 {
+			return fmt.Errorf("steps must be >= 1")
+		}
+	}
+	if p.Product == ProductPortfolio {
+		n := len(p.Assets)
+		if n < 2 {
+			return fmt.Errorf("portfolio needs at least 2 assets")
+		}
+		if n > maxAssets {
+			return fmt.Errorf("portfolio supports at most %d assets", maxAssets)
+		}
+		if len(p.Corr) != 0 && len(p.Corr) != n*n {
+			return fmt.Errorf("corr must have %d entries, got %d", n*n, len(p.Corr))
+		}
+		for _, a := range p.Assets {
+			if a.Spot <= 0 || a.Vol < 0 {
+				return fmt.Errorf("each asset needs spot > 0 and vol >= 0")
+			}
+		}
+	}
+	if p.Mode == ModeNaive && p.Paths > naiveHardCap {
+		return fmt.Errorf("naive mode caps at %d paths; one goroutine per path will not reach 100M", naiveHardCap)
+	}
+	if p.Mode == ModeNaive && p.Paths > naiveSoftCap && !p.Force {
+		return fmt.Errorf("naive mode launches one goroutine per path; %d is above %d (pass -force to allow up to %d)", p.Paths, naiveSoftCap, naiveHardCap)
+	}
+	return nil
+}
+
