@@ -37,3 +37,39 @@ func (m moments) meanStd() (mean, stderr float64) {
 	stderr = math.Sqrt((m2 / float64(m.n-1)) / float64(m.n))
 	return mean, stderr
 }
+
+type hist struct {
+	lo, width float64
+	counts    []uint64
+	sums      []float64
+	total     uint64
+	point     bool
+}
+
+func makeHist(lo, hi float64, bins int) *hist {
+	h := &hist{}
+	if bins < 1 {
+		bins = 1
+	}
+	span := hi - lo
+	if span < 1e-9 || math.IsNaN(span) {
+		h.point = true
+		h.counts = make([]uint64, 1)
+		h.sums = make([]float64, 1)
+		return h
+	}
+	pad := 0.01 * span
+	h.lo = lo - pad
+	h.width = (hi + pad - h.lo) / float64(bins)
+	h.counts = make([]uint64, bins)
+	h.sums = make([]float64, bins)
+	return h
+}
+
+func (h *hist) clone() *hist {
+	g := *h
+	g.counts = make([]uint64, len(h.counts))
+	g.sums = make([]float64, len(h.sums))
+	g.total = 0
+	return &g
+}
