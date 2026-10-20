@@ -57,3 +57,14 @@ func ParseProduct(s string) (Product, error) {
 func (p Product) oneStep() bool {
 	return p == ProductGBM || p == ProductEuropean || p == ProductVaR || p == ProductPortfolio
 }
+
+
+func (p Product) needsHist() bool {
+	return p == ProductVaR || p == ProductPortfolio
+}
+
+type Asset struct {
+	Spot float64
+	Vol  float64
+	Qty  float64
+}
