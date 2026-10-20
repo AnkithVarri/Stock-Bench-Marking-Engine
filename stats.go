@@ -38,6 +38,9 @@ func (m moments) meanStd() (mean, stderr float64) {
 	return mean, stderr
 }
 
+
+// hist is a fixed bin sketch of the loss distribution.
+
 type hist struct {
 	lo, width float64
 	counts    []uint64
@@ -122,4 +125,67 @@ func (h *hist) quantile(alpha float64) float64 {
 		cum = next
 	}
 	return h.lo + float64(len(h.counts))*h.width
+}
+
+// es is the mean of samples above the alpha quantile.
+// Full bins use their real sums; the bin that contains the quantile is treated as uniform.
+func (h *hist) es(alpha float64) float64 {
+	if h == nil || h.total == 0 {
+		return 0
+	}
+	q := h.quantile(alpha)
+	if h.point || h.width == 0 {
+		return q
+	}
+	var tailSum, tailN float64
+	left := h.lo
+	for i, c := range h.counts {
+		right := left + h.width
+		if c > 0 && right > q {
+			if left >= q {
+				tailSum += h.sums[i]
+				tailN += float64(c)
+			} else {
+				frac := (right - q) / h.width
+				tailN += frac * float64(c)
+				tailSum += frac * float64(c) * (q + right) / 2
+			}
+		}
+		left = right
+	}
+	if tailN == 0 {
+		return q
+	}
+	return tailSum / tailN
+}
+
+func (h *hist) bytes() int {
+	if h == nil {
+		return 0
+	}
+	return len(h.counts)*8 + len(h.sums)*8
+}
+
+// acc is what one worker keeps. Merge at the end, instead of locking per path.
+type acc struct {
+	m moments
+	h *hist
+}
+
+func (a *acc) observe(x float64) {
+	a.m.add(x)
+	if a.h != nil {
+		a.h.add(x)
+	}
+}
+
+func (a *acc) merge(b acc) {
+	a.m.merge(b.m)
+	if a.h != nil {
+		a.h.merge(b.h)
+	}
+}
+
+func (a acc) retained() int {
+	return 32 + a.h.bytes()
 }
