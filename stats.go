@@ -73,3 +73,53 @@ func (h *hist) clone() *hist {
 	g.total = 0
 	return &g
 }
+
+
+
+func (h *hist) add(x float64) {
+	h.total++
+	if h.point {
+		h.counts[0]++
+		h.sums[0] += x
+		return
+	}
+	i := int((x - h.lo) / h.width)
+	if i < 0 {
+		i = 0
+	} else if i >= len(h.counts) {
+		i = len(h.counts) - 1
+	}
+	h.counts[i]++
+	h.sums[i] += x
+}
+
+func (h *hist) merge(o *hist) {
+	if o == nil {
+		return
+	}
+	h.total += o.total
+	for i := range h.counts {
+		h.counts[i] += o.counts[i]
+		h.sums[i] += o.sums[i]
+	}
+}
+
+func (h *hist) quantile(alpha float64) float64 {
+	if h == nil || h.total == 0 {
+		return 0
+	}
+	if h.point || h.width == 0 {
+		return h.sums[0] / float64(h.counts[0])
+	}
+	target := alpha * float64(h.total)
+	var cum uint64
+	for i, c := range h.counts {
+		next := cum + c
+		if c > 0 && float64(next) >= target {
+			frac := (target - float64(cum)) / float64(c)
+			return h.lo + (float64(i)+frac)*h.width
+		}
+		cum = next
+	}
+	return h.lo + float64(len(h.counts))*h.width
+}
