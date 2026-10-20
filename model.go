@@ -68,3 +68,32 @@ type Asset struct {
 	Vol  float64
 	Qty  float64
 }
+
+
+type Params struct {
+	Product  Product
+	Mode     Mode
+	Spot     float64
+	Strike   float64
+	Rate     float64
+	Drift    float64
+	DriftSet bool
+	Vol      float64
+	Years    float64
+	Barrier  float64
+	Steps    int
+	Paths    int
+	Workers  int
+	Batch    int
+	Seed     int64
+	Force    bool
+	Assets   []Asset
+	Corr     []float64 // row-major, len n*n; empty means pairwise 0.4
+}
+
+func (p Params) mu() float64 {
+	if p.DriftSet {
+		return p.Drift
+	}
+	return p.Rate
+}
