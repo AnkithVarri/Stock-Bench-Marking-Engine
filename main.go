@@ -137,6 +137,16 @@ func parseFlags() (Params, bool, string, string, error) {
 }
 
 
+func runOnce(p Params) error {
+	res, err := Run(p)
+	if err != nil {
+		return err
+	}
+	printRun(p, res)
+	return nil
+}
+
+
 func printRun(p Params, res Result) {
 	fmt.Printf("Monte Carlo  %s  %s\n\n", p.Product, res.Mode)
 	fmt.Printf("  %-12s %s\n", "paths", comma(p.Paths))
