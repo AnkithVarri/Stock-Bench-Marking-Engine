@@ -384,6 +384,46 @@ func reference(p Params) (float64, bool) {
 
 
 
+func buildAssets(spots, vols, qty []float64) ([]Asset, error) {
+	if len(spots) == 0 {
+		return defaultBook(), nil
+	}
+	if len(vols) != len(spots) {
+		return nil, fmt.Errorf("spots and vols must be the same length")
+	}
+	if len(qty) != 0 && len(qty) != len(spots) {
+		return nil, fmt.Errorf("qty must be empty or the same length as spots")
+	}
+	out := make([]Asset, len(spots))
+	for i := range spots {
+		q := 1.0
+		if len(qty) != 0 {
+			q = qty[i]
+		}
+		out[i] = Asset{Spot: spots[i], Vol: vols[i], Qty: q}
+	}
+	return out, nil
+}
+
+func parseFloats(s string) ([]float64, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]float64, len(parts))
+	for i, part := range parts {
+		v, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
+		if err != nil {
+			return nil, fmt.Errorf("bad number %q", part)
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+var (
+	cpuFile *os.File
+)
 
 
 
