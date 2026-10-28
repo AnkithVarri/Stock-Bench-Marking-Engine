@@ -383,3 +383,50 @@ func oneStep[R interface{ NormFloat64() float64 }](pr *prepared, rng R, n int, d
 }
 
 
+func pathPayoff[R interface{ NormFloat64() float64 }](pr *prepared, rng R) float64 {
+	lg := pr.legs[0]
+	if pr.product == ProductBarrier && lg.spot <= pr.barrier {
+		return 0
+	}
+	logS := math.Log(lg.spot)
+	sum := 0.0
+	last := lg.spot
+	for i := 0; i < pr.steps; i++ {
+		logS += pr.stepDrift + pr.stepVol*rng.NormFloat64()
+		s := math.Exp(logS)
+		last = s
+		sum += s
+		if pr.product == ProductBarrier && s <= pr.barrier {
+			return 0
+		}
+	}
+	level := last
+	if pr.product == ProductAsian {
+		level = sum / float64(pr.steps) // fixings after t0, not including spot
+	}
+	c := level - pr.strike
+	if c < 0 {
+		c = 0
+	}
+	return pr.disc * c
+}
+
+func bookLoss[R interface{ NormFloat64() float64 }](pr *prepared, rng R) float64 {
+	var z [maxAssets]float64
+	n := len(pr.legs)
+	for i := 0; i < n; i++ {
+		z[i] = rng.NormFloat64()
+	}
+	v := 0.0
+	for i := 0; i < n; i++ {
+		cz := 0.0
+		row := pr.chol[i]
+		for k := 0; k <= i; k++ {
+			cz += row[k] * z[k]
+		}
+		v += pr.legs[i].qty * terminal(pr.legs[i], cz)
+	}
+	return pr.v0 - v
+}
+
+
