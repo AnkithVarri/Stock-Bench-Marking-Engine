@@ -454,6 +454,82 @@ func stopProfile() {
 
 
 
+func writeHeap(path string) error {
+	if path == "" {
+		return nil
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	runtime.GC()
+	if err := pprof.WriteHeapProfile(f); err != nil {
+		return err
+	}
+	fmt.Println("heap profile:", path)
+	return nil
+}
+
+func num(v float64) string {
+	return strconv.FormatFloat(v, 'f', 6, 64)
+}
+
+func rate(v float64) string {
+	switch {
+	case v >= 1e6:
+		return fmt.Sprintf("%.2fM", v/1e6)
+	case v >= 1e3:
+		return fmt.Sprintf("%.2fK", v/1e3)
+	case v == 0:
+		return "0"
+	default:
+		return fmt.Sprintf("%.0f", v)
+	}
+}
+
+func dur(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return "0"
+	case d < time.Millisecond:
+		return fmt.Sprintf("%.1fµs", float64(d)/float64(time.Microsecond))
+	case d < time.Second:
+		return fmt.Sprintf("%.1fms", float64(d)/float64(time.Millisecond))
+	default:
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	}
+}
+
+func bytes(n int) string {
+	if n < 1024 {
+		return fmt.Sprintf("%d B", n)
+	}
+	if n < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	}
+	if n < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(n)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(n)/(1024*1024*1024))
+}
+
+func comma(n int) string { return comma64(uint64(n)) }
+
+func comma64(n uint64) string {
+	s := strconv.FormatUint(n, 10)
+	lead := len(s) % 3
+	if lead == 0 {
+		lead = 3
+	}
+	var b strings.Builder
+	b.WriteString(s[:lead])
+	for i := lead; i < len(s); i += 3 {
+		b.WriteByte(',')
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
+}
 
 
 
