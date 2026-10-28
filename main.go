@@ -344,6 +344,45 @@ func explain(scale []Result, costs map[string]Result, big Result, oneStep bool) 
 
 
 
+func byWorkers(rows []Result, n int) (Result, bool) {
+	for _, r := range rows {
+		if r.Workers == n {
+			return r, true
+		}
+	}
+	return Result{}, false
+}
+
+func header() {
+	fmt.Printf("%-12s %7s %12s %10s %9s %7s %10s %12s\n",
+		"mode", "workers", "paths", "time", "paths/sec", "cores", "allocs", "mean")
+}
+
+func printRow(res Result) {
+	label := res.Mode.String()
+	if res.Mode == ModePool {
+		label = fmt.Sprintf("pool/%d", res.Batch)
+	}
+	fmt.Printf("%-12s %7d %12s %10s %9s %7.2f %10s %12s\n",
+		label, res.Workers, comma(res.Paths), dur(res.Elapsed), rate(res.PathsPerSec),
+		res.Cores, comma64(res.Mallocs), num(res.Mean))
+}
+
+func reference(p Params) (float64, bool) {
+	switch p.Product {
+	case ProductGBM:
+		return p.Spot * math.Exp(p.mu()*p.Years), true
+	case ProductEuropean:
+		if p.DriftSet && p.Drift != p.Rate {
+			return 0, false
+		}
+		return blackScholesCall(p.Spot, p.Strike, p.Rate, p.Vol, p.Years), true
+	default:
+		return 0, false
+	}
+}
+
+
 
 
 
