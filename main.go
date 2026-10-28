@@ -287,3 +287,68 @@ func runBench(p Params) error {
 	explain(scale, costs, big, p.Product.oneStep())
 	return nil
 }
+
+func put(dst map[string]Result, key string, p Params) error {
+	res, err := Run(p)
+	if err != nil {
+		return err
+	}
+	dst[key] = res
+	printRow(res)
+	return nil
+}
+
+func explain(scale []Result, costs map[string]Result, big Result, oneStep bool) {
+	r1, ok1 := byWorkers(scale, 1)
+	r8, ok8 := byWorkers(scale, 8)
+	r32, ok32 := byWorkers(scale, 32)
+	if ok1 && ok8 && ok32 && r8.PathsPerSec > 0 {
+		fmt.Printf("8 workers ran at %s paths/sec, 32 at %s.\n", rate(r8.PathsPerSec), rate(r32.PathsPerSec))
+		ratio := r32.PathsPerSec / r8.PathsPerSec
+		switch {
+		case ratio < 0.95:
+			fmt.Printf("32 workers were %.2fx the 8-worker rate. This machine has %d CPUs, so the extras mostly wait.\n", ratio, runtime.NumCPU())
+		case ratio > 1.15:
+			fmt.Printf("32 workers still beat 8 (%.2fx). The machine had room past 8.\n", ratio)
+		default:
+			fmt.Printf("8 and 32 workers are close (%.2fx). Throughput flattens near the %d CPUs; cores in use went from %.1f to %.1f.\n", ratio, runtime.NumCPU(), r8.Cores, r32.Cores)
+		}
+		fmt.Printf("Against one core, 8 workers were %.2fx.\n", r8.PathsPerSec/r1.PathsPerSec)
+	}
+	if pool, ok := costs["pool/1"]; ok {
+		if part, ok := costs["partition"]; ok && part.Elapsed > 0 {
+			fmt.Printf("A channel send per path took %.2fx the static split. Batch 8192 narrows that gap.\n", float64(pool.Elapsed)/float64(part.Elapsed))
+		}
+	}
+	if shared, ok := costs["shared-rng"]; ok {
+		if part, ok := costs["partition"]; ok && part.Elapsed > 0 {
+			fmt.Printf("One locked RNG took %.2fx private RNGs.\n", float64(shared.Elapsed)/float64(part.Elapsed))
+		}
+	}
+	if locked, ok := costs["locked-agg"]; ok {
+		if part, ok := costs["partition"]; ok && part.Elapsed > 0 {
+			fmt.Printf("Locking the total on every path took %.2fx merging local totals at the end.\n", float64(locked.Elapsed)/float64(part.Elapsed))
+		}
+	}
+	if naive, ok := costs["naive"]; ok && naive.PathsPerSec > 0 {
+		fmt.Printf("Naive goroutines: %s paths/sec on %s paths, %s allocs. The scheduler, not the payoff, is the work.\n",
+			rate(naive.PathsPerSec), comma(naive.Paths), comma64(naive.Mallocs))
+	}
+	if oneStep && big.Paths > 0 {
+		fmt.Printf("100M paths finished in %s, %s allocs, %s retained. Keeping every payoff would be %s.\n",
+			dur(big.Elapsed), comma64(big.Mallocs), bytes(big.Retained), bytes(big.Paths*8))
+	} else {
+		fmt.Println("Asian and barrier paths are streamed the same way. A 100M run is -paths 100000000 -mode partition.")
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
