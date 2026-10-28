@@ -430,3 +430,28 @@ func bookLoss[R interface{ NormFloat64() float64 }](pr *prepared, rng R) float64
 }
 
 
+
+func blackScholesCall(spot, strike, rate, vol, years float64) float64 {
+	if years == 0 || vol == 0 {
+		st := spot * math.Exp(rate*years)
+		return math.Exp(-rate*years) * math.Max(0, st-strike)
+	}
+	sqrtT := math.Sqrt(years)
+	d1 := (math.Log(spot/strike) + (rate+0.5*vol*vol)*years) / (vol * sqrtT)
+	d2 := d1 - vol*sqrtT
+	return spot*normCDF(d1) - strike*math.Exp(-rate*years)*normCDF(d2)
+}
+
+func normCDF(x float64) float64 {
+	return 0.5 * math.Erfc(-x/math.Sqrt2)
+}
+
+func defaultBook() []Asset {
+	return []Asset{
+		{Spot: 100, Vol: 0.20, Qty: 1},
+		{Spot: 80, Vol: 0.25, Qty: 1},
+		{Spot: 50, Vol: 0.30, Qty: 1},
+	}
+}
+
+
