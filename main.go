@@ -197,3 +197,93 @@ func printRun(p Params, res Result) {
 }
 
 
+func runBench(p Params) error {
+	fmt.Printf("Monte Carlo bench  %s\n", p.Product)
+	fmt.Printf("paths %s   seed %d   CPUs %d\n\n", comma(p.Paths), p.Seed, runtime.NumCPU())
+
+	warm := p
+	warm.Paths = min(p.Paths, 50_000)
+	warm.Workers = 2
+	warm.Mode = ModePartition
+	warm.Force = false
+	if _, err := Run(warm); err != nil {
+		return err
+	}
+
+	fmt.Println("Static partition — one block per worker, private RNG, totals merged at the end")
+	fmt.Println()
+	header()
+	var scale []Result
+	for _, w := range []int{1, 2, 4, 8, 16, 32} {
+		run := p
+		run.Mode = ModePartition
+		run.Workers = w
+		res, err := Run(run)
+		if err != nil {
+			return err
+		}
+		scale = append(scale, res)
+		printRow(res)
+	}
+
+	fmt.Println()
+	fmt.Println("Same path count, other schedulers (naive is capped — one goroutine per path)")
+	fmt.Println()
+	header()
+	costs := map[string]Result{}
+	focus := 8
+	seq := p
+	seq.Mode = ModeSequential
+	seq.Workers = 1
+	if err := put(costs, "sequential", seq); err != nil {
+		return err
+	}
+
+	naive := p
+	naive.Mode = ModeNaive
+	naive.Paths = min(p.Paths, naiveSoftCap)
+	naive.Force = false
+	if err := put(costs, "naive", naive); err != nil {
+		return err
+	}
+
+	for _, batch := range []int{1, 256, 8192} {
+		run := p
+		run.Mode = ModePool
+		run.Workers = focus
+		run.Batch = batch
+		if err := put(costs, fmt.Sprintf("pool/%d", batch), run); err != nil {
+			return err
+		}
+	}
+	for _, mode := range []Mode{ModePartition, ModeSharedRNG, ModeLockedAgg} {
+		run := p
+		run.Mode = mode
+		run.Workers = focus
+		if err := put(costs, mode.String(), run); err != nil {
+			return err
+		}
+	}
+
+	var big Result
+	var bigErr error
+	if p.Product.oneStep() {
+		fmt.Println()
+		fmt.Println("100M paths, static partition, streaming totals")
+		fmt.Println()
+		header()
+		run := p
+		run.Mode = ModePartition
+		run.Workers = 0
+		run.Paths = 100_000_000
+		big, bigErr = Run(run)
+		if bigErr != nil {
+			return bigErr
+		}
+		printRow(big)
+	}
+
+	fmt.Println()
+	explain(scale, costs, big, p.Product.oneStep())
+	return nil
+}
