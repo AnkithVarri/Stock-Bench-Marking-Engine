@@ -325,3 +325,61 @@ func closedForm(p Params, pr prepared) (float64, bool) {
 
 
 
+func allZeroVol(pr prepared) bool {
+	for _, lg := range pr.legs {
+		if lg.diffuse != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func asianClosed(spot, mu, years, disc, strike float64, steps int) float64 {
+	if years == 0 || steps < 1 || mu == 0 {
+		return disc * math.Max(0, spot-strike)
+	}
+	dt := years / float64(steps)
+	r := math.Exp(mu * dt)
+	sum := spot * r * (1 - math.Pow(r, float64(steps))) / (1 - r)
+	return disc * math.Max(0, sum/float64(steps)-strike)
+}
+
+func terminal(lg leg, z float64) float64 {
+	return lg.spot * math.Exp(lg.drift+lg.diffuse*z)
+}
+
+func consume[R interface{ NormFloat64() float64 }](pr *prepared, rng R, n int, dst *acc) {
+	switch pr.product {
+	case ProductAsian, ProductBarrier:
+		for i := 0; i < n; i++ {
+			dst.observe(pathPayoff(pr, rng))
+		}
+	case ProductPortfolio:
+		for i := 0; i < n; i++ {
+			dst.observe(bookLoss(pr, rng))
+		}
+	default:
+		oneStep(pr, rng, n, dst)
+	}
+}
+
+func oneStep[R interface{ NormFloat64() float64 }](pr *prepared, rng R, n int, dst *acc) {
+	lg := pr.legs[0]
+	for i := 0; i < n; i++ {
+		st := terminal(lg, rng.NormFloat64())
+		switch pr.product {
+		case ProductGBM:
+			dst.observe(st)
+		case ProductEuropean:
+			c := st - pr.strike
+			if c < 0 {
+				c = 0
+			}
+			dst.observe(pr.disc * c)
+		default: // single-asset loss
+			dst.observe(lg.qty * (lg.spot - st))
+		}
+	}
+}
+
+
