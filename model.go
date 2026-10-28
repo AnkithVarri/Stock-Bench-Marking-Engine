@@ -237,3 +237,61 @@ func corrMatrix(flat []float64, n int) [][]float64 {
 	return a
 }
 
+
+func cholesky(a [][]float64) ([][]float64, error) {
+	n := len(a)
+	l := make([][]float64, n)
+	for i := range l {
+		l[i] = make([]float64, n)
+	}
+	for i := 0; i < n; i++ {
+		for j := 0; j <= i; j++ {
+			sum := a[i][j]
+			for k := 0; k < j; k++ {
+				sum -= l[i][k] * l[j][k]
+			}
+			if i == j {
+				if sum <= 1e-12 {
+					return nil, fmt.Errorf("correlation matrix is not positive definite")
+				}
+				l[i][j] = math.Sqrt(sum)
+			} else {
+				l[i][j] = sum / l[j][j]
+			}
+		}
+	}
+	return l, nil
+}
+
+func span(lg leg) (lo, hi float64) {
+	if lg.diffuse == 0 {
+		s := lg.spot * math.Exp(lg.drift)
+		return s, s
+	}
+	return lg.spot * math.Exp(lg.drift-12*lg.diffuse), lg.spot * math.Exp(lg.drift+12*lg.diffuse)
+}
+
+func lossRange(pr prepared) (lo, hi float64) {
+	switch pr.product {
+	case ProductVaR, ProductPortfolio:
+		vmin, vmax := 0.0, 0.0
+		for _, lg := range pr.legs {
+			sLo, sHi := span(lg)
+			// qty can be short, so min and max flip.
+			a, b := lg.qty*sLo, lg.qty*sHi
+			if a > b {
+				a, b = b, a
+			}
+			vmin += a
+			vmax += b
+		}
+		return pr.v0 - vmax, pr.v0 - vmin
+	default:
+		return 0, 0
+	}
+}
+
+
+
+
+
