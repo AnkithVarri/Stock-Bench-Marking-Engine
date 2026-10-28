@@ -425,6 +425,35 @@ var (
 	cpuFile *os.File
 )
 
+unc startProfile(path string) error {
+	if path == "" {
+		return nil
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	if err := pprof.StartCPUProfile(f); err != nil {
+		f.Close()
+		return err
+	}
+	cpuFile = f
+	fmt.Println("cpu profile:", path)
+	return nil
+}
+
+func stopProfile() {
+	if cpuFile == nil {
+		return
+	}
+	pprof.StopCPUProfile()
+	cpuFile.Close()
+	cpuFile = nil
+}
+
+
+
+
 
 
 
