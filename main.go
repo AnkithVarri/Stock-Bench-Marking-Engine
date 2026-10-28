@@ -4,73 +4,38 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"runtime"
-	"sync"
+	"runtime/pprof"
+	"strconv"
+	"strings"
 	"time"
 )
 
 func main() {
-	samples := flag.Int64("samples", 10_000_000, "number of random points to generate")
-	workers := flag.Int("workers", runtime.GOMAXPROCS(0), "number of parallel workers")
-	seed := flag.Int64("seed", 1, "random seed")
-	flag.Parse()
-
-	start := time.Now()
-	hits, err := estimate(*samples, *workers, *seed)
-	elapsed := time.Since(start)
+	p, bench, cpuProfile, memProfile, err := parseFlags()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "monte-carlo:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(2)
 	}
-
-	
-}
-
-func estimate(samples int64, workers int, seed int64) (int64, error) {
-	if samples <= 0 {
-		return 0, fmt.Errorf("samples must be greater than zero")
+	if err := startProfile(cpuProfile); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
 	}
-	if workers <= 0 {
-		return 0, fmt.Errorf("workers must be greater than zero")
-	}
-	if int64(workers) > samples {
-		workers = int(samples)
-	}
+	defer stopProfile()
 
-	hits := make(chan int64, workers)
-	var group sync.WaitGroup
-	baseSamples := samples / int64(workers)
-	remainder := samples % int64(workers)
-
-	for worker := 0; worker < workers; worker++ {
-		count := baseSamples
-		if int64(worker) < remainder {
-			count++
+	if bench {
+		if err := runBench(p); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
 		}
-
-		group.Add(1)
-		go func(worker int, count int64) {
-			defer group.Done()
-			random := rand.New(rand.NewSource(seed + int64(worker)))
-			var workerHits int64
-			for i := int64(0); i < count; i++ {
-				x, y := random.Float64(), random.Float64()
-				if x*x+y*y <= 1 {
-					workerHits++
-				}
-			}
-			hits <- workerHits
-		}(worker, count)
+	} else if err := runOnce(p); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
 	}
-
-	group.Wait()
-	close(hits)
-
-	var total int64
-	for workerHits := range hits {
-		total += workerHits
+	if err := writeHeap(memProfile); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
 	}
-	return total, nil
 }
+
