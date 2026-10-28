@@ -1,4 +1,4 @@
-# mcengine
+# Stock Bench Marking Engine
 
 A small Monte Carlo engine in Go. It prices options and estimates portfolio loss, and it is built so you can see what concurrency costs.
 
