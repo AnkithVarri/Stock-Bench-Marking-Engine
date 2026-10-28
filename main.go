@@ -137,3 +137,53 @@ func parseFlags() (Params, bool, string, string, error) {
 }
 
 
+func printRun(p Params, res Result) {
+	fmt.Printf("Monte Carlo  %s  %s\n\n", p.Product, res.Mode)
+	fmt.Printf("  %-12s %s\n", "paths", comma(p.Paths))
+	fmt.Printf("  %-12s %d\n", "workers", res.Workers)
+	if res.Batch > 0 {
+		fmt.Printf("  %-12s %s\n", "batch", comma(res.Batch))
+	}
+	fmt.Printf("  %-12s %s\n", "horizon", fmt.Sprintf("%.2f years", p.Years))
+	fmt.Printf("  %-12s %s\n", "drift", fmt.Sprintf("%.2f%%", p.mu()*100))
+	if p.Product == ProductPortfolio {
+		fmt.Printf("  %-12s %d assets\n", "book", len(p.Assets))
+	} else {
+		fmt.Printf("  %-12s %.4g @ %.2f%% vol\n", "spot", p.Spot, p.Vol*100)
+	}
+	fmt.Println()
+	fmt.Printf("  %-12s %s\n", "mean", num(res.Mean))
+	fmt.Printf("  %-12s %s\n", "std. error", num(res.StdErr))
+	if p.Product.needsHist() {
+		fmt.Printf("  %-12s %s    ES %s\n", "VaR 95", num(res.VaR95), num(res.ES95))
+		fmt.Printf("  %-12s %s    ES %s\n", "VaR 99", num(res.VaR99), num(res.ES99))
+		if res.Mean < 0 {
+			fmt.Println("  negative mean loss means the book gained on average")
+		}
+	}
+	if ref, ok := reference(p); ok && !res.Closed {
+		fmt.Printf("  %-12s %s\n", "analytic", num(ref))
+		fmt.Printf("  %-12s %+.6f\n", "difference", res.Mean-ref)
+	}
+	if res.Closed {
+		fmt.Printf("  %-12s deterministic, nothing was simulated\n", "note")
+	}
+	fmt.Println()
+	fmt.Printf("  %-12s %s\n", "elapsed", dur(res.Elapsed))
+	fmt.Printf("  %-12s %s paths/sec\n", "throughput", rate(res.PathsPerSec))
+	fmt.Printf("  %-12s %.2f cores\n", "cpu", res.Cores)
+	fmt.Printf("  %-12s %s\n", "allocs", comma64(res.Mallocs))
+	fmt.Printf("  %-12s %s  (a payoff slice would be %s)\n", "retained", bytes(res.Retained), bytes(p.Paths*8))
+	fmt.Println()
+	if ref, ok := reference(p); ok && res.StdErr > 0 {
+		d := math.Abs(res.Mean - ref)
+		if d <= 2*res.StdErr {
+			fmt.Println("Within 2 standard errors of the closed form.")
+		} else {
+			fmt.Printf("About %.1f standard errors from the closed form.\n", d/res.StdErr)
+		}
+	}
+	fmt.Println("Scheduler comparison: go run . -bench")
+}
+
+
