@@ -292,6 +292,36 @@ func lossRange(pr prepared) (lo, hi float64) {
 }
 
 
+func closedForm(p Params, pr prepared) (float64, bool) {
+	if p.Years == 0 || (p.Product != ProductPortfolio && p.Vol == 0) || allZeroVol(pr) {
+		switch p.Product {
+		case ProductGBM:
+			return pr.legs[0].spot * math.Exp(pr.mu*p.Years), true
+		case ProductEuropean:
+			st := pr.legs[0].spot * math.Exp(pr.mu*p.Years)
+			return pr.disc * math.Max(0, st-pr.strike), true
+		case ProductAsian:
+			return asianClosed(pr.legs[0].spot, pr.mu, p.Years, pr.disc, pr.strike, p.Steps), true
+		case ProductBarrier:
+			st := pr.legs[0].spot * math.Exp(pr.mu*p.Years)
+			if pr.legs[0].spot <= pr.barrier || st <= pr.barrier {
+				return 0, true
+			}
+			return pr.disc * math.Max(0, st-pr.strike), true
+		case ProductVaR, ProductPortfolio:
+			loss := 0.0
+			for _, lg := range pr.legs {
+				st := lg.spot * math.Exp(pr.mu*p.Years)
+				loss += lg.qty * (lg.spot - st)
+			}
+			return loss, true
+		}
+	}
+	if p.Product == ProductBarrier && p.Spot <= p.Barrier {
+		return 0, true
+	}
+	return 0, false
+}
 
 
 
