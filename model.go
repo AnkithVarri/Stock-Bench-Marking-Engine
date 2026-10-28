@@ -175,5 +175,65 @@ type prepared struct {
 	hasClosed bool
 }
 
+func prepare(p Params) (prepared, error) {
+	pr := prepared{
+		product: p.Product,
+		strike:  p.Strike,
+		barrier: p.Barrier,
+		disc:    math.Exp(-p.Rate * p.Years),
+		steps:   p.Steps,
+		mu:      p.mu(),
+		rate:    p.Rate,
+	}
+	assets := p.Assets
+	if p.Product != ProductPortfolio {
+		assets = []Asset{{Spot: p.Spot, Vol: p.Vol, Qty: 1}}
+	}
+	pr.legs = make([]leg, len(assets))
+	for i, a := range assets {
+		sig := a.Vol
+		pr.legs[i] = leg{
+			spot:    a.Spot,
+			qty:     a.Qty,
+			drift:   (pr.mu - 0.5*sig*sig) * p.Years,
+			diffuse: sig * math.Sqrt(p.Years),
+		}
+		pr.v0 += a.Qty * a.Spot
+	}
+	if p.Product == ProductPortfolio {
+		chol, err := cholesky(corrMatrix(p.Corr, len(assets)))
+		if err != nil {
+			return prepared{}, err
+		}
+		pr.chol = chol
+	}
+	if p.Steps > 0 && p.Years > 0 && p.Product != ProductPortfolio {
+		dt := p.Years / float64(p.Steps)
+		sig := p.Vol
+		pr.stepDrift = (pr.mu - 0.5*sig*sig) * dt
+		pr.stepVol = sig * math.Sqrt(dt)
+	}
+	pr.histLo, pr.histHi = lossRange(pr)
+	pr.closed, pr.hasClosed = closedForm(p, pr)
+	return pr, nil
+}
 
+func corrMatrix(flat []float64, n int) [][]float64 {
+	a := make([][]float64, n)
+	for i := range a {
+		a[i] = make([]float64, n)
+		for j := range a[i] {
+			if len(flat) == 0 {
+				if i == j {
+					a[i][j] = 1
+				} else {
+					a[i][j] = 0.4
+				}
+				continue
+			}
+			a[i][j] = flat[i*n+j]
+		}
+	}
+	return a
+}
 
