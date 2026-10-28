@@ -425,7 +425,7 @@ var (
 	cpuFile *os.File
 )
 
-unc startProfile(path string) error {
+func startProfile(path string) error {
 	if path == "" {
 		return nil
 	}
