@@ -146,3 +146,34 @@ func (p Params) validate() error {
 	return nil
 }
 
+
+
+const maxAssets = 8
+
+type leg struct {
+	spot, qty float64
+	drift     float64 // (mu - σ²/2) T
+	diffuse   float64 // σ √T
+}
+
+type prepared struct {
+	product   Product
+	strike    float64
+	barrier   float64
+	disc      float64
+	steps     int
+	stepDrift float64
+	stepVol   float64
+	legs      []leg
+	chol      [][]float64
+	v0        float64
+	mu        float64
+	rate      float64
+	histLo    float64
+	histHi    float64
+	closed    float64
+	hasClosed bool
+}
+
+
+
