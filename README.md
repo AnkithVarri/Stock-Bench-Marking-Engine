@@ -84,7 +84,7 @@ The bench is there to answer four questions:
 
 ## Products
 
-Every product uses
+Every product uses this Formula
 
 ```text
 S_T = S0 * exp((μ - σ²/2) T + σ √T · Z),   Z ~ N(0,1)
